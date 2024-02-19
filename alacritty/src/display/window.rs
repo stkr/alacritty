@@ -1,3 +1,4 @@
+use toml::Table;
 #[cfg(not(any(target_os = "macos", windows)))]
 use winit::platform::startup_notify::{
     self, EventLoopExtStartupNotify, WindowAttributesExtStartupNotify,
@@ -16,7 +17,7 @@ use {
     png::Decoder,
 };
 
-use std::fmt::{self, Display, Formatter};
+use std::{fmt::{self, Display, Formatter}};
 
 #[cfg(target_os = "macos")]
 use {
@@ -297,8 +298,71 @@ impl Window {
     }
 
     #[cfg(windows)]
+    fn get_icon_count(icon_class: &str) -> u32
+    {
+        // The assumption here is that icons are consecutive 0-based indexed!
+        let exe_path = std::env::current_exe().expect("Unable to determine application exe path");
+        let exe_dir = exe_path.parent().expect("Unable to determine application directory");
+        let r = regex::Regex::new(r"alacritty_icon_(\w+)_([0-9]+)\.ico").unwrap();
+        let paths = std::fs::read_dir(exe_dir).expect("Unable to get directory entries");
+        let mut count = 0;
+        for path_w in paths {
+            let path_str = path_w.unwrap().file_name().into_string().unwrap();
+            let Some(caps) = r.captures(&path_str) else { continue; };
+            let found_class = caps.get(1).unwrap().as_str().to_string();
+            let found_index = caps.get(2).unwrap().as_str().parse::<u32>().unwrap();
+            if found_class == icon_class && (found_index + 1) > count {
+                count = found_index + 1;
+            }
+        }
+        return count
+    }
+
+    #[cfg(windows)]
+    fn increment_overlay_nr(icon_class: & str, variation_count: u32) -> u32 {
+        let mut toml = Table::new();
+        let key_index = format!("{}_icon_index", icon_class);
+
+        let info_path = std::env::temp_dir().join("alacritty_icons.txt");
+        if info_path.exists() {
+            let toml_str = std::fs::read_to_string(&info_path).expect("Failed to read alacritty_icons.txt");
+            toml = toml_str.parse::<Table>().unwrap_or(Table::new());
+        }
+
+        if ! toml.contains_key(&key_index) {
+            toml.insert(key_index.clone(), toml::Value::from(0));
+        }
+
+        let value = toml.get(&key_index).unwrap().as_integer().unwrap() as u32;
+        toml.insert(key_index, toml::Value::from((value + 1) % variation_count));
+
+        let toml_str_wr = toml::to_string(&toml).unwrap();
+        std::fs::write(&info_path, toml_str_wr).expect("Failed to write alacritty_icons.txt");
+
+        return value;
+    }
+
+    #[cfg(windows)]
+    fn get_icon_path(icon_class: &str) -> std::result::Result<winit::window::Icon, winit::window::BadIcon> {
+        let variation_count = Self::get_icon_count(icon_class);
+        if variation_count <= 0 {
+            return winit::window::Icon::from_resource(IDI_ICON, None);
+        }
+        let overlay_nr = Self::increment_overlay_nr(icon_class, variation_count);
+        let exe_path = std::env::current_exe().expect("Unable to determine application directory");
+        let exe_dir = exe_path.parent().expect("Unable to determine application directory");
+        let icon_path = exe_dir.join(format!("alacritty_icon_{}_{}.ico", icon_class, overlay_nr));
+        return winit::window::Icon::from_path(icon_path, None);
+    }
+
+    #[cfg(windows)]
     pub fn get_platform_window(_: &Identity, window_config: &WindowConfig) -> WindowAttributes {
-        let icon = winit::window::Icon::from_resource(IDI_ICON, None);
+
+        let mut icon = winit::window::Icon::from_resource(IDI_ICON, None);
+
+        if ! window_config.icon_class.is_empty() {
+            icon = Self::get_icon_path(&window_config.icon_class);
+        }
 
         WinitWindow::default_attributes()
             .with_decorations(window_config.decorations != Decorations::None)

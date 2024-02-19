@@ -53,6 +53,9 @@ pub struct WindowConfig {
     /// Resize increments.
     pub resize_increments: bool,
 
+    /// TODO
+    pub icon_class: String,
+
     /// Pixel padding.
     padding: Delta<u16>,
 
@@ -61,6 +64,7 @@ pub struct WindowConfig {
 
     /// System decorations theme variant.
     decorations_theme_variant: Option<Theme>,
+
 }
 
 impl Default for WindowConfig {
@@ -78,6 +82,7 @@ impl Default for WindowConfig {
             startup_mode: Default::default(),
             dynamic_padding: Default::default(),
             resize_increments: Default::default(),
+            icon_class: Default::default(),
             decorations_theme_variant: Default::default(),
             option_as_alt: Default::default(),
         }

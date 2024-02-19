@@ -55,6 +55,7 @@ dependencies = [
  "objc",
  "parking_lot",
  "png",
+ "regex",
  "serde",
  "serde_json",
  "serde_yaml",
